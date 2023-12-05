@@ -120,9 +120,6 @@ BOOL hideNotificationButton() {
 BOOL replacePreviousAndNextButton() {
     return [[NSUserDefaults standardUserDefaults] boolForKey:@"replacePreviousAndNextButton_enabled"];
 }
-BOOL dontEatMyContent() {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"dontEatMyContent_enabled"];
-}
 
 # pragma mark - Tweaks
 // Skips content warning before playing *some videos - @PoomSmart
@@ -167,7 +164,7 @@ BOOL dontEatMyContent() {
 }
 %end
 
-//Hide Cast Button since Cercube's option is not working
+// Hide Cast Button since Cercube's option is not working
 %group gHideCastButton
 %hook MDXPlaybackRouteButtonController
 - (BOOL)isPersistentCastIconEnabled { return NO; }
@@ -180,10 +177,26 @@ BOOL dontEatMyContent() {
 %end
 %end
 
-// Hide Watermarks
-%hook YTAnnotationsViewController
+// Hide Channel Watermark
+%hook YTMainAppVideoPlayerOverlayView
+- (BOOL)isWatermarkEnabled {
+    if (IsEnabled(@"hideChannelWatermark_enabled")) {
+        return NO;
+    }
+    return %orig;
+}
+- (void)setFeaturedChannelWatermarkImageView:(id)imageView {
+    if (IsEnabled(@"hideChannelWatermark_enabled")) {
+        return;
+    }
+    %orig(imageView);
+}
+%end
+
+// Hide Channel Watermark (for Backwards Compatibility)
+%hook YTAnnotationsViewController // Deprecated hook
 - (void)loadFeaturedChannelWatermark {
-    if (hideWatermarks()) {}
+    if (IsEnabled(@"hideChannelWatermark_enabled")) {}
     else { return %orig; }
 }
 %end
@@ -322,13 +335,18 @@ BOOL didLateHook = NO;
 %end
 
 // YTShortsProgress - @PoomSmart - https://github.com/PoomSmart/YTShortsProgress
+%hook YTShortsPlayerViewController
+- (BOOL)shouldAlwaysEnablePlayerBar { return YES; }
+- (BOOL)shouldEnablePlayerBarOnlyOnPause { return NO; }
+%end
+
 %hook YTReelPlayerViewController
 - (BOOL)shouldEnablePlayerBar { return YES; }
 - (BOOL)shouldAlwaysEnablePlayerBar { return YES; }
 - (BOOL)shouldEnablePlayerBarOnlyOnPause { return NO; }
 %end
 
-%hook YTReelPlayerViewControllerSub
+%hook YTReelPlayerViewControllerSub // Deprecated hook
 - (BOOL)shouldEnablePlayerBar { return YES; }
 - (BOOL)shouldAlwaysEnablePlayerBar { return YES; }
 - (BOOL)shouldEnablePlayerBarOnlyOnPause { return NO; }
@@ -817,102 +835,7 @@ static void replaceTab(YTIGuideResponse *response) {
 %end
 %end
 
-// DontEatMyContent - @therealFoxster: https://github.com/therealFoxster/DontEatMyContent
-static double videoAspectRatio = 16/9;
-static bool zoomedToFill = false;
-static bool engagementPanelIsVisible = false, removeEngagementPanelViewControllerWithIdentifierCalled = false;
 
-static MLHAMSBDLSampleBufferRenderingView *renderingView;
-static NSLayoutConstraint *widthConstraint, *heightConstraint, *centerXConstraint, *centerYConstraint;
-
-%group gDontEatMyContent
-
-// Retrieve video aspect ratio 
-%hook YTPlayerView
-- (void)setAspectRatio:(CGFloat)aspectRatio {
-    %orig(aspectRatio);
-    videoAspectRatio = aspectRatio;
-}
-%end
-
-%hook YTPlayerViewController
-- (void)viewDidAppear:(BOOL)animated {
-    YTPlayerView *playerView = [self playerView];
-    UIView *renderingViewContainer = MSHookIvar<UIView *>(playerView, "_renderingViewContainer");
-    renderingView = [playerView renderingView];
-
-    // Making renderingView a bit larger since constraining to safe area leaves a gap between the notch and video
-    CGFloat constant = 24.5; // Tested on iPhone 13 mini
-
-    widthConstraint = [renderingView.widthAnchor constraintEqualToAnchor:renderingViewContainer.safeAreaLayoutGuide.widthAnchor constant:constant];
-    heightConstraint = [renderingView.heightAnchor constraintEqualToAnchor:renderingViewContainer.safeAreaLayoutGuide.heightAnchor constant:constant];
-    centerXConstraint = [renderingView.centerXAnchor constraintEqualToAnchor:renderingViewContainer.centerXAnchor];
-    centerYConstraint = [renderingView.centerYAnchor constraintEqualToAnchor:renderingViewContainer.centerYAnchor];
-    
-    // playerView.backgroundColor = [UIColor blueColor];
-    // renderingViewContainer.backgroundColor = [UIColor greenColor];
-    // renderingView.backgroundColor = [UIColor redColor];
-
-    YTMainAppVideoPlayerOverlayViewController *activeVideoPlayerOverlay = [self activeVideoPlayerOverlay];
-
-    // Must check class since YTInlineMutedPlaybackPlayerOverlayViewController doesn't have -(BOOL)isFullscreen
-    if ([NSStringFromClass([activeVideoPlayerOverlay class]) isEqualToString:@"YTMainAppVideoPlayerOverlayViewController"] // isKindOfClass doesn't work for some reason
-    && [activeVideoPlayerOverlay isFullscreen]) {
-        if (!zoomedToFill && !engagementPanelIsVisible) DEMC_activate();
-    } else {
-        DEMC_centerRenderingView();
-    }
-
-    %orig(animated);
-}
-- (void)didPressToggleFullscreen {
-    %orig;
-    if (![[self activeVideoPlayerOverlay] isFullscreen]) { // Entering full screen
-        if (!zoomedToFill && !engagementPanelIsVisible) DEMC_activate();
-    } else { // Exiting full screen
-        DEMC_deactivate();
-    }
-    
-    %orig;
-}
-- (void)didSwipeToEnterFullscreen {
-    %orig; 
-    if (!zoomedToFill && !engagementPanelIsVisible) DEMC_activate();
-}
-- (void)didSwipeToExitFullscreen { 
-    %orig; 
-    DEMC_deactivate(); 
-}
-// New video played
--(void)playbackController:(id)playbackController didActivateVideo:(id)video withPlaybackData:(id)playbackData {
-    %orig(playbackController, video, playbackData);
-    if ([[self activeVideoPlayerOverlay] isFullscreen]) // New video played while in full screen (landscape)
-        // Activate since new videos played in full screen aren't zoomed-to-fill by default
-        // (i.e. the notch/Dynamic Island will cut into content when playing a new video in full screen)
-        DEMC_activate(); 
-    engagementPanelIsVisible = false;
-    removeEngagementPanelViewControllerWithIdentifierCalled = false;
-}
-%end
-
-// Pinch to zoom
-%hook YTVideoFreeZoomOverlayView
-- (void)didRecognizePinch:(UIPinchGestureRecognizer *)pinchGestureRecognizer {
-    DEMC_deactivate();
-    %orig(pinchGestureRecognizer);
-}
-// Detect zoom to fill
-- (void)showLabelForSnapState:(NSInteger)snapState {
-    if (snapState == 0) { // Original
-        zoomedToFill = false;
-        DEMC_activate();
-    } else if (snapState == 1) { // Zoomed to fill
-        zoomedToFill = true;
-        // No need to deactivate constraints as it's already done in -(void)didRecognizePinch:(UIPinchGestureRecognizer *)
-    }
-    %orig(snapState);
-}
-%end
 
 // Mini bar dismiss
 %hook YTWatchMiniBarViewController
@@ -925,98 +848,6 @@ static NSLayoutConstraint *widthConstraint, *heightConstraint, *centerXConstrain
     zoomedToFill = false;
 }
 %end
-
-%hook YTMainAppEngagementPanelViewController
-// Engagement panel (comment, description, etc.) about to show up
-- (void)viewWillAppear:(BOOL)animated {
-    if ([self isPeekingSupported]) {
-        // Shorts (only Shorts support peeking, I think)
-    } else {
-        // Everything else
-        engagementPanelIsVisible = true;
-        if ([self isLandscapeEngagementPanel]) {
-            DEMC_deactivate();
-        }
-    }
-    %orig(animated);
-}
-// Engagement panel about to dismiss
-// - (void)viewDidDisappear:(BOOL)animated { %orig; %log; } // Called too late & isn't reliable so sometimes constraints aren't activated even when engagement panel is closed
-%end
-
-%hook YTEngagementPanelContainerViewController
-// Engagement panel about to dismiss
-- (void)notifyEngagementPanelContainerControllerWillHideFinalPanel { // Called in time but crashes if plays new video while in full screen causing engagement panel dismissal
-    // Must check if engagement panel was dismissed because new video played
-    // (i.e. if -(void)removeEngagementPanelViewControllerWithIdentifier:(id) was called prior)
-    if (![self isPeekingSupported] && !removeEngagementPanelViewControllerWithIdentifierCalled) {
-        engagementPanelIsVisible = false;
-        if ([self isLandscapeEngagementPanel] && !zoomedToFill) {
-            DEMC_activate();
-        }
-    }
-    %orig;
-}
-- (void)removeEngagementPanelViewControllerWithIdentifier:(id)identifier {
-    // Usually called when engagement panel is open & new video is played or mini bar is dismissed
-    removeEngagementPanelViewControllerWithIdentifierCalled = true;
-    %orig(identifier);
-}
-%end
-
-%end// group gDontEatMyContent
-
-BOOL DEMC_deviceIsSupported() {
-    // Get device model identifier (e.g. iPhone14,4)
-    // https://stackoverflow.com/a/11197770/19227228
-    struct utsname systemInfo;
-    uname(&systemInfo);
-    NSString *deviceModelID = [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
-    
-    NSArray *unsupportedModelIDs = DEMC_UNSUPPORTED_DEVICES;
-    for (NSString *identifier in unsupportedModelIDs) {
-        if ([deviceModelID isEqualToString:identifier]) {
-            return NO;
-        }
-    }
-
-    if ([deviceModelID containsString:@"iPhone"]) {
-        if ([deviceModelID isEqualToString:@"iPhone13,1"]) {
-            // iPhone 12 mini
-            return YES; 
-        } 
-        NSString *modelNumber = [[deviceModelID stringByReplacingOccurrencesOfString:@"iPhone" withString:@""] stringByReplacingOccurrencesOfString:@"," withString:@"."];
-        if ([modelNumber floatValue] >= 14.0) {
-            // iPhone 13 series and newer
-            return YES;
-        } else return NO;
-    } else return NO;
-}
-
-void DEMC_activate() {
-    if (videoAspectRatio < DEMC_THRESHOLD) {
-        DEMC_deactivate();
-        return;
-    }
-    // NSLog(@"activate");
-    DEMC_centerRenderingView();
-    renderingView.translatesAutoresizingMaskIntoConstraints = NO;
-    widthConstraint.active = YES;
-    heightConstraint.active = YES;
-}
-
-void DEMC_deactivate() {
-    // NSLog(@"deactivate");
-    DEMC_centerRenderingView();
-    renderingView.translatesAutoresizingMaskIntoConstraints = YES;
-    widthConstraint.active = NO;
-    heightConstraint.active = NO;
-}
-
-void DEMC_centerRenderingView() {
-    centerXConstraint.active = YES;
-    centerYConstraint.active = YES;
-}
 
 // YTNoShorts: https://github.com/MiRO92/YTNoShorts
 %hook YTAsyncCollectionView
@@ -1042,34 +873,53 @@ void DEMC_centerRenderingView() {
 
 // YTSpeed - https://github.com/Lyvendia/YTSpeed
 %hook YTVarispeedSwitchController
-- (id)init {
-	id result = %orig;
+- (instancetype)init {
+	if ((self = %orig)) {
+        const int size = 12;
+        float speeds[] = {0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0};
+        id varispeedSwitchControllerOptions[size];
 
-	const int size = 12;
-	float speeds[] = {0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0};
-	id varispeedSwitchControllerOptions[size];
+        for (int i = 0; i < size; ++i) {
+            id title = [NSString stringWithFormat:@"%.2fx", speeds[i]];
+            varispeedSwitchControllerOptions[i] = [[%c(YTVarispeedSwitchControllerOption) alloc] initWithTitle:title rate:speeds[i]];
+        }
 
-	for (int i = 0; i < size; ++i) {
-		id title = [NSString stringWithFormat:@"%.2fx", speeds[i]];
-		varispeedSwitchControllerOptions[i] = [[%c(YTVarispeedSwitchControllerOption) alloc] initWithTitle:title rate:speeds[i]];
-	}
+        NSUInteger count = sizeof(varispeedSwitchControllerOptions) / sizeof(id);
+        NSArray *varispeedArray = [NSArray arrayWithObjects:varispeedSwitchControllerOptions count:count];
+        MSHookIvar<NSArray *>(self, "_options") = varispeedArray;
+    }
+	return self;
+}
+%end
 
-	NSUInteger count = sizeof(varispeedSwitchControllerOptions) / sizeof(id);
-	NSArray *varispeedArray = [NSArray arrayWithObjects:varispeedSwitchControllerOptions count:count];
-	MSHookIvar<NSArray *>(self, "_options") = varispeedArray;
-
-	return result;
+%hook YTLocalPlaybackController
+- (instancetype)initWithParentResponder:(id)parentResponder overlayFactory:(id)overlayFactory playerView:(id)playerView playbackControllerDelegate:(id)playbackControllerDelegate viewportSizeProvider:(id)viewportSizeProvider shouldDelayAdsPlaybackCoordinatorCreation:(BOOL)shouldDelayAdsPlaybackCoordinatorCreation {
+    float savedRate = [[NSUserDefaults standardUserDefaults] floatForKey:@"YoutubeSpeed_PlaybackRate"];
+    if ((self = %orig)) {
+        MSHookIvar<float>(self, "_restoredPlaybackRate") = savedRate == 0 ? DEFAULT_RATE : savedRate;
+    }
+    return self;
+}
+- (void)setPlaybackRate:(float)rate {
+    %orig;
+	[[NSUserDefaults standardUserDefaults] setFloat: rate forKey:@"YoutubeSpeed_PlaybackRate"];
 }
 %end
 
 %hook MLHAMQueuePlayer
+- (instancetype)initWithStickySettings:(id)stickySettings playerViewProvider:(id)playerViewProvider {
+	id result = %orig;
+	float savedRate = [[NSUserDefaults standardUserDefaults] floatForKey:@"YoutubeSpeed_PlaybackRate"];
+	[self setRate: savedRate == 0 ? DEFAULT_RATE : savedRate];
+	return result;
+}
 - (void)setRate:(float)rate {
-	MSHookIvar<float>(self, "_rate") = rate;
+    MSHookIvar<float>(self, "_rate") = rate;
 	MSHookIvar<float>(self, "_preferredRate") = rate;
 
 	id player = MSHookIvar<HAMPlayerInternal *>(self, "_player");
 	[player setRate: rate];
-	
+
 	id stickySettings = MSHookIvar<MLPlayerStickySettings *>(self, "_stickySettings");
 	[stickySettings setRate: rate];
 
@@ -1078,14 +928,7 @@ void DEMC_centerRenderingView() {
 	YTSingleVideoController *singleVideoController = self.delegate;
 	[singleVideoController playerRateDidChange: rate];
 }
-%end 
-
-// %hook YTPlayerViewController
-// %property float playbackRate;
-// - (void)singleVideo:(id)video playbackRateDidChange:(float)rate {
-// 	%orig;
-// }
-// %end
+%end
 
 # pragma mark - ctor
 %ctor {
@@ -1110,8 +953,5 @@ void DEMC_centerRenderingView() {
     }
     if (replacePreviousAndNextButton()) {
        %init(gReplacePreviousAndNextButton);
-    }
-    if (dontEatMyContent() && DEMC_deviceIsSupported()) {
-       %init(gDontEatMyContent);
     }
 }
