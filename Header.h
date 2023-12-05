@@ -3,8 +3,8 @@
 #define LOC(x) [tweakBundle localizedStringForKey:x value:nil table:nil]
 #define YT_BUNDLE_ID @"com.google.ios.youtube"
 #define YT_NAME @"YouTube"
-#define DEMC_UNSUPPORTED_DEVICES @[@"iPhone14,3", @"iPhone14,6", @"iPhone14,8"] // DontEatMycontent
-#define DEMC_THRESHOLD 1.99 // DontEatMycontent
+#define DEFAULT_RATE 1.0f // YTSpeed
+
 // YTSpeed
 @interface YTVarispeedSwitchControllerOption : NSObject
 - (id)initWithTitle:(id)title rate:(float)rate;
@@ -29,6 +29,11 @@
 - (void)setRate:(float)rate;
 @end
 
+@interface YTLocalPlaybackController : NSObject
+- (void)setPlaybackRate:(float)rate;
+- (id)activeVideo;
+@end
+
 // CercubePlus
 @interface YTPlayabilityResolutionUserActionUIController : NSObject // Skips content warning before playing *some videos - @PoomSmart
 - (void)confirmAlertDidPressConfirm;
@@ -50,6 +55,7 @@
 @interface YTRightNavigationButtons : UIView
 @property (nonatomic, strong, readwrite) MDCButton *cercubeButton;
 @property YTQTMButton *notificationButton;
+@property YTQTMButton *sponsorBlockButton;
 @end
 
 // IAmYouTube
@@ -67,8 +73,11 @@
 // YTAutoFullscreen
 @interface YTPlayerViewController (YTAFS)
 - (void)autoFullscreen;
-- (id)activeVideoPlayerOverlay; // DontEatMycontent
-- (id)playerView; // DontEatMycontent
+// YTSpeed
+@property id activeVideo;
+@property float playbackRate;
+- (void)singleVideo:(id)video playbackRateDidChange:(float)rate;
+- (YTSingleVideoController *)activeVideo;
 @end
 
 // YTNoShorts
@@ -83,41 +92,26 @@
 - (void)removeShortsCellAtIndexPath:(NSIndexPath *)indexPath;
 @end
 
-// DontEatMyContent
-BOOL DEMC_deviceIsSupported();
-void DEMC_activate();
-void DEMC_deactivate(); 
-void DEMC_centerRenderingView();
-
-@interface YTPlayerView : UIView
-- (id)renderingView;
+// YTCubePlus
+@interface YTChipCloudCell : UIView
 @end
 
-@interface YTMainAppVideoPlayerOverlayViewController : UIViewController
-- (BOOL)isFullscreen;
+@interface YCHLiveChatView : UIView
 @end
 
-@interface HAMSBDLSampleBufferRenderingView : UIView
+@interface YTFullscreenEngagementOverlayView : UIView
 @end
 
-@interface MLHAMSBDLSampleBufferRenderingView : HAMSBDLSampleBufferRenderingView
+@interface YTRelatedVideosView : UIView
 @end
 
-@interface YTMainAppEngagementPanelViewController : UIViewController
-- (BOOL)isLandscapeEngagementPanel;
-- (BOOL)isPeekingSupported;
+@interface YTTopAlignedView : UIView
 @end
 
-@interface YTEngagementPanelContainerViewController : UIViewController
-- (BOOL)isLandscapeEngagementPanel;
-- (BOOL)isPeekingSupported;
+@interface ELMView : UIView
 @end
 
-// OLED Darkmode
-@interface ELMView: UIView
-@end
-
-@interface ASWAppSwitcherCollectionViewCell: UIView
+@interface ASWAppSwitcherCollectionViewCell : UIView
 @end
 
 @interface ASScrollView : UIView
@@ -132,10 +126,19 @@ void DEMC_centerRenderingView();
 @interface _ASDisplayView : UIView
 @end
 
+@interface ELMContainerNode : NSObject
+@end
+
+@interface YTAutonavEndscreenView : UIView
+@end
+
+@interface YTPivotBarIndicatorView : UIView
+@end
+
 @interface YTCommentDetailHeaderCell : UIView
 @end
 
-@interface SponsorBlockSettingsController : UITableViewController 
+@interface SponsorBlockSettingsController : UITableViewController
 @end
 
 @interface SponsorBlockViewController : UIViewController
