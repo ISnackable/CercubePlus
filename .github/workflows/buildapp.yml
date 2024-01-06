@@ -93,7 +93,7 @@ jobs:
       - name: Download Cercube & Prepare YouTube iPA
         run: |
           curl "https://raw.githubusercontent.com/Muirey03/RemoteLog/master/RemoteLog.h" --output "$THEOS/include/RemoteLog.h"
-          # curl "https://apt.alfhaily.me/files/me.alfhaily.cercube_${{ env.CERCUBE_VERSION }}_iphoneos-arm.deb" --output "main/Tweaks/Cercube/me.alfhaily.cercube_${{ env.CERCUBE_VERSION }}_iphoneos-arm.deb"
+          # curl -L "https://apt.alfhaily.me/files/me.alfhaily.cercube_${{ env.CERCUBE_VERSION }}_iphoneos-arm.deb" --output "main/Tweaks/Cercube/me.alfhaily.cercube_${{ env.CERCUBE_VERSION }}_iphoneos-arm.deb"
           wget "$YOUTUBE_URL" --no-verbose -O main/YouTube.ipa
           dpkg-deb -x "main/Tweaks/Cercube/me.alfhaily.cercube_${{ env.CERCUBE_VERSION }}_iphoneos-arm.deb" main/Tweaks/Cercube/
           unzip -q main/YouTube.ipa -d main/tmp
