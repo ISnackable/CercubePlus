@@ -1,5 +1,5 @@
 # Original idea by @ISnackable. Many thanks to him for handling the most hardest parts!
-# https://github.com/ISnackable/CercubePlus/blob/main/.github/workflows/Build.yml
+# https://github.com/ISnackable/YTCubePlus/blob/main/.github/workflows/Build.yml
 
 name: Build and Release CercubePlus
 
@@ -52,29 +52,24 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: theos/theos
-          ref: 3da31488281ecf4394d10302d2629607f4a1aa07
+          ref: 9941262c450c0abac524574cb96b9a4cdf5e50f4
           path: theos
           submodules: recursive
 
       - name: Caching
         id: SDK
-        uses: actions/cache@v3.0.11
+        uses: actions/cache@v3.3.2
         env:
-          cache-name: iOS-15.5-SDK
+          cache-name: iOS-16.2-SDK
         with:
           path: theos/sdks/
           key: ${{ env.cache-name }}
 
-      - name: Download iOS 15.5 SDK
+      - name: Download iOS 16.2 SDK
         if: steps.SDK.outputs.cache-hit != 'true'
         run: |
-          curl -LO https://github.com/chrisharper22/sdks/archive/main.zip
-          TMP=$(mktemp -d)
-          unzip -qq main.zip -d $TMP
-          mv $TMP/sdks-main/*.sdk $THEOS/sdks
-          rm -r main.zip $TMP
-        env:
-          THEOS: ${{ github.workspace }}/theos
+          git clone --quiet https://github.com/arichorn/sdks.git
+          mv sdks/iPhoneOS16.2.sdk $THEOS/sdks
 
       - name: Setup Theos Jailed
         uses: actions/checkout@v3
